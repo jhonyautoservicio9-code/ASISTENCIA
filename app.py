@@ -111,16 +111,20 @@ def admin_required(fn):
 STYLE = """
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-*{box-sizing:border-box}body{font-family:Arial,sans-serif;background:#f3f5f7;color:#17212b;margin:0}
-.wrap{max-width:1050px;margin:25px auto;padding:0 15px}.card{background:#fff;border-radius:14px;padding:21px;margin:14px 0;box-shadow:0 3px 14px #0000000c}
-h1{font-size:25px;margin:0 0 8px}h2{font-size:19px;margin:0 0 13px}.muted{color:#667085}
-input,select,button{font-size:15px;padding:11px;border-radius:8px;border:1px solid #ccd2d8}
-button,.btn{background:#17212b;color:white;border:0;cursor:pointer;text-decoration:none;display:inline-block;padding:11px 15px;border-radius:8px}
-.btn.secondary{background:#e8edf2;color:#17212b}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.row input{flex:1;min-width:170px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #e8ebee;font-size:14px}
-.notice{padding:12px;border-radius:8px;background:#edf5ff;margin:10px 0}.ok{background:#e8f7ed}.warn{background:#fff4e5}
-.big{font-size:22px;font-weight:bold}.center{text-align:center}.small{font-size:13px}
-@media(max-width:650px){.wrap{margin:12px auto}.card{padding:15px}table{display:block;overflow-x:auto;white-space:nowrap}h1{font-size:22px}}
+:root{
+  --bg:#f4f7fb; --panel:#ffffff; --text:#17212b; --muted:#667085; --line:#e7edf4; --primary:#17212b; --primary-soft:#edf3ff; --success:#eafaf0; --warning:#fff5e8; --danger:#ffe7e7;
+}
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;background:linear-gradient(180deg,#eef3fb 0%,#f7f8fb 100%);color:var(--text);margin:0}
+.wrap{max-width:1100px;margin:24px auto;padding:0 16px}.card{background:var(--panel);border-radius:18px;padding:22px;margin:14px 0;box-shadow:0 12px 30px rgba(19,33,52,0.06);border:1px solid rgba(23,33,43,0.03)}
+h1{font-size:28px;margin:0 0 8px}h2{font-size:20px;margin:0 0 14px}.muted{color:var(--muted)}
+input,select,button{font-size:15px;padding:11px;border-radius:10px;border:1px solid #ced8e4}
+button,.btn{background:linear-gradient(180deg,#1a2d3d 0%,#121f2c 100%);color:white;border:0;cursor:pointer;text-decoration:none;display:inline-block;padding:11px 15px;border-radius:10px;font-weight:600}
+.btn.secondary{background:#edf3ff;color:#17212b;border:1px solid #dfe9f5}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.row input{flex:1;min-width:170px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);font-size:14px}
+th{color:var(--muted);font-weight:700}
+.notice{padding:12px 14px;border-radius:10px;background:#edf5ff;margin:10px 0}.ok{background:var(--success)}.warn{background:var(--warning)}.error{background:var(--danger)}
+.big{font-size:22px;font-weight:bold}.center{text-align:center}.small{font-size:13px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0}.stat{padding:18px;background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%);border:1px solid var(--line);border-radius:14px}.stat .label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.stat .value{margin-top:8px;font-size:32px;font-weight:bold}
+.badge{display:inline-block;padding:5px 10px;border-radius:999px;background:#edf5ff;color:#17212b;font-weight:600;font-size:12px}
+@media(max-width:650px){.wrap{margin:12px auto}.card{padding:15px}table{display:block;overflow-x:auto;white-space:nowrap}h1{font-size:22px}.stat .value{font-size:26px}}
 </style>
 """
 
@@ -140,7 +144,6 @@ def get_range():
 
 
 def safe_csv_cell(value):
-    """Prevent spreadsheet formulas in user-controlled CSV fields."""
     if isinstance(value, str) and value.startswith(("=", "+", "-", "@", "\t", "\r")):
         return "'" + value
     return value
@@ -168,26 +171,30 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        validate_csrf()
+        if request.form.get("_csrf_token") != session.get("_csrf_token"):
+            abort(400, "Formulario vencido o inválido.")
         if secrets.compare_digest(request.form.get("password", ""), ADMIN_PASSWORD):
             session.clear()
             session["admin"] = True
             session.permanent = True
             return redirect(url_for("admin"))
         flash("Contraseña incorrecta.")
+    csrf = secrets.token_urlsafe(32)
+    session["_csrf_token"] = csrf
     return render_template_string(STYLE + """
     <div class="wrap"><div class="card" style="max-width:430px;margin:65px auto">
     <h1>Autoservicio JHONY</h1><h2>Control de asistencia QR</h2>
     {% with ms=get_flashed_messages() %}{% for m in ms %}<div class="notice warn">{{m}}</div>{% endfor %}{% endwith %}
     <form method="post"><input type="hidden" name="_csrf_token" value="{{csrf}}">
     <input name="password" type="password" placeholder="Contraseña de administrador" required autocomplete="current-password" style="width:100%;margin:10px 0">
-    <button style="width:100%">Iniciar sesión</button></form></div></div>""", csrf=csrf_token())
+    <button style="width:100%">Iniciar sesión</button></form></div></div>""", csrf=csrf)
 
 
 @app.post("/logout")
 @admin_required
 def logout():
-    validate_csrf()
+    if request.form.get("_csrf_token") != session.get("_csrf_token"):
+        abort(400, "Formulario vencido o inválido.")
     session.clear()
     return redirect(url_for("login"))
 
@@ -201,41 +208,80 @@ def admin():
         employees = con.execute("SELECT * FROM employees ORDER BY name COLLATE NOCASE").fetchall()
         today_rows = con.execute("""SELECT a.*,e.name FROM attendance a JOIN employees e ON e.id=a.employee_id
             WHERE substr(a.timestamp,1,10)=? ORDER BY a.timestamp DESC""", (today,)).fetchall()
+        total_workers = con.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
+        active_workers = con.execute("SELECT COUNT(*) FROM employees WHERE active=1").fetchone()[0]
+        today_entries = con.execute("SELECT COUNT(*) FROM attendance WHERE substr(timestamp,1,10)=? AND event='ENTRADA'", (today,)).fetchone()[0]
+        today_exits = con.execute("SELECT COUNT(*) FROM attendance WHERE substr(timestamp,1,10)=? AND event='SALIDA'", (today,)).fetchone()[0]
+
+    csrf = csrf_token()
     return render_template_string(STYLE + """
     <div class="wrap">
-      <div class="row" style="justify-content:space-between"><div><h1>Autoservicio JHONY</h1><div class="muted">Panel de asistencia · {{today}}</div></div>
-      <form method="post" action="{{url_for('logout')}}"><input type="hidden" name="_csrf_token" value="{{csrf}}"><button class="btn secondary">Cerrar sesión</button></form></div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div>
+          <h1>Autoservicio JHONY</h1>
+          <div class="muted">Panel de asistencia · {{today}}</div>
+        </div>
+        <form method="post" action="{{url_for('logout')}}">
+          <input type="hidden" name="_csrf_token" value="{{csrf}}"><button class="btn secondary">Cerrar sesión</button>
+        </form>
+      </div>
+
       {% with ms=get_flashed_messages() %}{% for m in ms %}<div class="notice">{{m}}</div>{% endfor %}{% endwith %}
+
+      <div class="stats">
+        <div class="stat"><div class="label">Trabajadores</div><div class="value">{{total_workers}}</div></div>
+        <div class="stat"><div class="label">Activos</div><div class="value">{{active_workers}}</div></div>
+        <div class="stat"><div class="label">Entradas hoy</div><div class="value">{{today_entries}}</div></div>
+        <div class="stat"><div class="label">Salidas hoy</div><div class="value">{{today_exits}}</div></div>
+      </div>
+
       <div class="card"><h2>Registrar trabajador</h2><form class="row" method="post" action="{{url_for('add_employee')}}">
         <input type="hidden" name="_csrf_token" value="{{csrf}}"><input name="name" placeholder="Nombre completo" maxlength="100" required><button>Agregar trabajador</button></form>
-        <p class="muted small">Se generará un QR personal. Puedes abrirlo e imprimirlo desde la lista.</p></div>
+        <p class="muted small">Se genera un QR personal y se puede imprimir desde la lista.</p></div>
+
       <div class="card"><h2>Trabajadores ({{employees|length}})</h2>
       {% if employees %}<table><tr><th>Nombre</th><th>Estado</th><th>QR</th><th>Acción</th></tr>
-      {% for e in employees %}<tr><td><b>{{e.name}}</b></td><td>{{'Activo' if e.active else 'Inactivo'}}</td>
-      <td><a href="{{url_for('qr_page', employee_id=e.id)}}" target="_blank" rel="noopener">Ver / imprimir QR</a></td><td>
+      {% for e in employees %}<tr><td><b>{{e.name}}</b></td><td><span class="badge">{{'Activo' if e.active else 'Inactivo'}}</span></td>
+      <td><a href="{{url_for('qr_page', employee_id=e.id)}}" target="_blank" rel="noopener">Ver / imprimir</a></td><td>
       <form method="post" action="{{url_for('toggle_employee', employee_id=e.id)}}"><input type="hidden" name="_csrf_token" value="{{csrf}}"><button class="btn secondary">{{'Desactivar' if e.active else 'Activar'}}</button></form></td></tr>{% endfor %}</table>
       {% else %}<p class="muted">Aún no hay trabajadores.</p>{% endif %}</div>
+
       <div class="card"><h2>Movimientos de hoy</h2>
       {% if today_rows %}<table><tr><th>Trabajador</th><th>Movimiento</th><th>Hora local</th></tr>
       {% for r in today_rows %}<tr><td>{{r.name}}</td><td>{{r.event}}</td><td>{{r.timestamp[11:19]}}</td></tr>{% endfor %}</table>
       {% else %}<p class="muted">Todavía no hay movimientos registrados hoy.</p>{% endif %}</div>
-      <div class="card"><h2>Reportes de asistencia</h2><p class="muted">Selecciona el periodo. Los archivos CSV se abren directamente con Excel.</p>
+
+      <div class="card"><h2>Reportes de asistencia</h2>
+        <p class="muted">Selecciona el periodo para exportar a CSV.</p>
         <form class="row" method="get" action="{{url_for('admin')}}"><label>Desde <input type="date" name="start" value="{{start}}" required></label>
           <label>Hasta <input type="date" name="end" value="{{end}}" required></label><button>Aplicar periodo</button></form>
         <div class="row" style="margin-top:14px"><a class="btn" href="{{url_for('export_general', start=start, end=end)}}">Descargar reporte general</a>
           <form class="row" method="get" action="{{url_for('export_employee')}}"><input type="hidden" name="start" value="{{start}}"><input type="hidden" name="end" value="{{end}}">
             <select name="employee_id" required><option value="">Selecciona trabajador</option>{% for e in employees if e.active %}<option value="{{e.id}}">{{e.name}}</option>{% endfor %}</select>
-            <button>Descargar reporte individual</button></form></div></div>
-      <div class="card"><h2>Uso del sistema</h2><ol><li>Agrega a cada trabajador y abre su QR.</li><li>El trabajador escanea su código con la cámara del celular.</li>
-      <li>Confirma el botón de registrar entrada o salida.</li><li>Descarga el reporte general o individual al cierre de semana.</li></ol>
+            <button>Descargar reporte individual</button></form></div>
+      </div>
+
+      <div class="card"><h2>Uso del sistema</h2><ol><li>Agrega a cada trabajador y abre su QR.</li><li>El trabajador escanea su código con la cámara del celular.</li><li>Confirma el botón de registrar entrada o salida.</li><li>Descarga el reporte general o individual al cierre de semana.</li></ol>
       <div class="notice warn"><b>Nota:</b> el QR identifica al trabajador, pero no demuestra por sí solo que esté físicamente en el negocio. Evita compartir o publicar los códigos. Los registros usan la hora del servidor en zona horaria de Ciudad de México.</div></div>
-    </div>""", employees=employees, today_rows=today_rows, today=today, start=start, end=end, csrf=csrf_token())
+    </div>""",
+    employees=employees,
+    today_rows=today_rows,
+    today=today,
+    start=start,
+    end=end,
+    total_workers=total_workers,
+    active_workers=active_workers,
+    today_entries=today_entries,
+    today_exits=today_exits,
+    csrf=csrf,
+    )
 
 
 @app.post("/employee/add")
 @admin_required
 def add_employee():
-    validate_csrf()
+    if request.form.get("_csrf_token") != session.get("_csrf_token"):
+        abort(400, "Formulario vencido o inválido.")
     name = request.form.get("name", "").strip()
     if not name or len(name) > 100:
         abort(400, "El nombre debe tener entre 1 y 100 caracteres")
@@ -252,7 +298,8 @@ def add_employee():
 @app.post("/employee/toggle/<int:employee_id>")
 @admin_required
 def toggle_employee(employee_id):
-    validate_csrf()
+    if request.form.get("_csrf_token") != session.get("_csrf_token"):
+        abort(400, "Formulario vencido o inválido.")
     with db() as con:
         con.execute("UPDATE employees SET active=1-active WHERE id=?", (employee_id,))
     return redirect(url_for("admin"))
@@ -288,7 +335,8 @@ def mark(token):
         abort(404)
 
     if request.method == "POST":
-        validate_csrf()
+        if request.form.get("_csrf_token") != session.get("_csrf_token"):
+            abort(400, "Formulario vencido o inválido.")
         stamp_dt = now()
         stamp = stamp_dt.isoformat(timespec="seconds")
         with db() as con:
@@ -312,12 +360,14 @@ def mark(token):
     with db() as con:
         last = con.execute("SELECT event,timestamp FROM attendance WHERE employee_id=? ORDER BY id DESC LIMIT 1", (employee["id"],)).fetchone()
     event = next_move(last, today)
+    csrf = secrets.token_urlsafe(32)
+    session["_csrf_token"] = csrf
     return render_template_string(STYLE + """
     <div class="wrap"><div class="card center" style="max-width:520px;margin:45px auto"><h1>Autoservicio JHONY</h1><h2>Registro de asistencia</h2>
     <p class="muted">Trabajador</p><div class="big">{{name}}</div><div class="notice">Siguiente movimiento: <b>{{event}}</b></div>
     {% if last %}<p class="muted small">Último movimiento: {{last.event}} · {{last.timestamp.replace('T',' ')}}</p>{% endif %}
     <form method="post"><input type="hidden" name="_csrf_token" value="{{csrf}}"><button style="font-size:20px;width:100%;padding:18px">Confirmar {{event}}</button></form>
-    <p class="muted small">Confirma solo al llegar o al terminar tu jornada.</p></div></div>""", name=employee["name"], event=event, last=last, csrf=csrf_token())
+    <p class="muted small">Confirma solo al llegar o al terminar tu jornada.</p></div></div>""", name=employee["name"], event=event, last=last, csrf=csrf)
 
 
 @app.route("/export/general")
