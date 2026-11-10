@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: asistencia-qr-autoservicio-jhony
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    healthCheckPath: /health
+    disk:
+      name: asistencia-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: APP_TIMEZONE
+        value: America/Mexico_City
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
